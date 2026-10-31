@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import crypto from 'crypto';
+import fs from 'node:fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
@@ -9,27 +10,25 @@ import { createServer as createViteServer } from 'vite';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// --- SSRF & Security Defense ---
+// Outbound requests are restricted to the exact upstream hosts used by this app.
+// This is safer than trying to maintain a partial private-IP blocklist.
+const ALLOWED_UPSTREAM_HOSTS = new Set([
+  'en.wikipedia.org',
+  'export.arxiv.org',
+  'api.github.com',
+  'openlibrary.org',
+  'covers.openlibrary.org',
+  'api.gdeltproject.org',
+  'commons.wikimedia.org',
+]);
+
 function isSafeUpstreamUrl(targetUrl: string): boolean {
   try {
     const parsed = new URL(targetUrl);
-    if (!['http:', 'https:'].includes(parsed.protocol)) return false;
-    const hostname = parsed.hostname.toLowerCase();
-    if (['localhost', '127.0.0.1', '::1', '0.0.0.0'].includes(hostname)) return false;
-    // Private IPv4 ranges
-    if (
-      hostname.startsWith('10.') ||
-      hostname.startsWith('192.168.') ||
-      hostname.startsWith('169.254.') || // link-local & cloud metadata
-      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname)
-    ) {
-      return false;
-    }
-    // Metadata service endpoints
-    if (hostname.includes('metadata.google.internal') || hostname.includes('169.254.169.254')) {
-      return false;
-    }
-    return true;
+    return parsed.protocol === 'https:' &&
+      parsed.username === '' && parsed.password === '' &&
+      (parsed.port === '' || parsed.port === '443') &&
+      ALLOWED_UPSTREAM_HOSTS.has(parsed.hostname.toLowerCase());
   } catch {
     return false;
   }
@@ -46,8 +45,9 @@ async function safeFetchJson(url: string, timeoutMs: number = 4500, headers: Rec
   try {
     const res = await fetch(url, {
       signal: controller.signal,
+      redirect: 'error',
       headers: {
-        'User-Agent': 'OrbitSearch/4.0 (Enterprise Federated Search; +https://orbitsearch.io)',
+        'User-Agent': 'OrbitSearch/4.0 (Federated Search; +https://orbitsearch.io)',
         Accept: 'application/json, text/plain, */*',
         ...headers,
       },
@@ -56,7 +56,9 @@ async function safeFetchJson(url: string, timeoutMs: number = 4500, headers: Rec
     if (!res.ok) {
       throw new Error(`Upstream returned HTTP ${res.status}`);
     }
-    return await res.json();
+    const body = await res.text();
+    if (body.length > 2_000_000) throw new Error('Upstream response exceeded the 2 MB limit');
+    return JSON.parse(body);
   } catch (err: any) {
     clearTimeout(timer);
     throw err;
@@ -73,14 +75,17 @@ async function safeFetchText(url: string, timeoutMs: number = 4500, headers: Rec
   try {
     const res = await fetch(url, {
       signal: controller.signal,
+      redirect: 'error',
       headers: {
-        'User-Agent': 'OrbitSearch/4.0 (Enterprise Federated Search)',
+        'User-Agent': 'OrbitSearch/4.0 (Federated Search)',
         ...headers,
       },
     });
     clearTimeout(timer);
     if (!res.ok) throw new Error(`Upstream returned HTTP ${res.status}`);
-    return await res.text();
+    const body = await res.text();
+    if (body.length > 2_000_000) throw new Error('Upstream response exceeded the 2 MB limit');
+    return body;
   } catch (err: any) {
     clearTimeout(timer);
     throw err;
@@ -213,23 +218,32 @@ interface ApiKeyRecord {
 }
 
 const apiKeysStore = new Map<string, ApiKeyRecord>();
+const dataDirectory = path.resolve(process.env.ORBIT_DATA_DIR || path.join(__dirname, 'data'));
+const apiKeyStorePath = path.join(dataDirectory, 'api-keys.json');
 
-// Pre-seed an active developer demo key
-const demoKeyPlain = 'orb_live_demo_enterprise_99x';
-const demoKeyHash = crypto.createHash('sha256').update(demoKeyPlain).digest('hex');
-apiKeysStore.set(demoKeyHash, {
-  id: 'key_demo_01',
-  keyPrefix: 'orb_live_demo',
-  keyHash: demoKeyHash,
-  name: 'Default Development Key',
-  userId: 'usr_demo_01',
-  plan: 'pro',
-  quotaMonthly: 50000,
-  usedMonthly: 1248,
-  status: 'active',
-  createdAt: new Date().toISOString(),
-  lastUsedAt: new Date().toISOString(),
-});
+function loadApiKeys(): void {
+  try {
+    const records = JSON.parse(fs.readFileSync(apiKeyStorePath, 'utf8')) as ApiKeyRecord[];
+    for (const record of records) {
+      if (record && typeof record.keyHash === 'string' && typeof record.id === 'string') {
+        apiKeysStore.set(record.keyHash, record);
+      }
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.error('[Orbit Search] API key store could not be loaded; starting with an empty key store.');
+    }
+  }
+}
+
+function persistApiKeys(): void {
+  fs.mkdirSync(dataDirectory, { recursive: true, mode: 0o700 });
+  const tempPath = `${apiKeyStorePath}.tmp`;
+  fs.writeFileSync(tempPath, JSON.stringify(Array.from(apiKeysStore.values()), null, 2), { mode: 0o600 });
+  fs.renameSync(tempPath, apiKeyStorePath);
+}
+
+loadApiKeys();
 
 function hashKey(plain: string): string {
   return crypto.createHash('sha256').update(plain.trim()).digest('hex');
@@ -517,22 +531,32 @@ async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
 
-  app.use(cors());
-  app.use(express.json({ limit: '2mb' }));
+  const allowedOrigins = (process.env.ORBIT_ALLOWED_ORIGINS || '').split(',').map(value => value.trim()).filter(Boolean);
+  app.use(cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(null, false);
+    },
+    credentials: false,
+  }));
+  app.use(express.json({ limit: '256kb', strict: true }));
 
   // Request ID & security headers middleware
   app.use((req: Request, res: Response, next: NextFunction) => {
     res.setHeader('X-Request-Id', crypto.randomUUID());
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'");
     next();
   });
 
   // Global IP rate-limiter
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.path.startsWith('/api/')) {
-      const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.socket.remoteAddress || '127.0.0.1';
+      // Do not trust X-Forwarded-For unless a trusted reverse proxy is configured.
+      const clientIp = req.socket.remoteAddress || 'unknown';
       if (!checkRateLimit(clientIp, ipBuckets, 120, 2)) {
         res.status(429).json({
           error: 'Rate limit exceeded',
@@ -543,6 +567,25 @@ async function startServer() {
     }
     next();
   });
+
+  // Admin APIs stay disabled unless an operator explicitly configures a strong token.
+  const requireAdmin = (req: Request, res: Response, next: NextFunction) => {
+    const expected = process.env.ORBIT_ADMIN_TOKEN || '';
+    if (expected.length < 32) {
+      res.status(503).json({ error: 'Admin API disabled', message: 'Configure ORBIT_ADMIN_TOKEN with a random secret of at least 32 characters.' });
+      return;
+    }
+    const match = req.headers.authorization?.match(/^Bearer (.+)$/);
+    const supplied = match?.[1] || '';
+    const expectedBuffer = Buffer.from(expected);
+    const suppliedBuffer = Buffer.from(supplied);
+    if (expectedBuffer.length !== suppliedBuffer.length || !crypto.timingSafeEqual(expectedBuffer, suppliedBuffer)) {
+      res.status(401).json({ error: 'Unauthorized', message: 'Admin authentication required.' });
+      return;
+    }
+    next();
+  };
+  app.use('/api/v1/keys', requireAdmin);
 
   // --- API Routes ---
 
@@ -571,9 +614,23 @@ async function startServer() {
 
   // Federated search endpoint
   app.get('/api/v1/search', async (req: Request, res: Response) => {
-    const q = (req.query.q as string || '').trim();
-    const category = (req.query.category as string || 'all').toLowerCase();
-    const limit = Math.max(1, Math.min(Number(req.query.limit) || 12, 30));
+    const q = (typeof req.query.q === 'string' ? req.query.q : '').trim();
+    const category = (typeof req.query.category === 'string' ? req.query.category : 'all').toLowerCase();
+    const allowedCategories = new Set(['all', 'knowledge', 'research', 'code', 'books', 'news', 'images']);
+    const requestedLimit = Number(req.query.limit ?? 12);
+    if (!q || q.length > 280) {
+      res.status(400).json({ error: 'Invalid query', message: 'q is required and must be 1–280 characters.' });
+      return;
+    }
+    if (!allowedCategories.has(category)) {
+      res.status(400).json({ error: 'Invalid category', allowedCategories: Array.from(allowedCategories) });
+      return;
+    }
+    if (!Number.isInteger(requestedLimit) || requestedLimit < 1 || requestedLimit > 30) {
+      res.status(400).json({ error: 'Invalid limit', message: 'limit must be an integer from 1 to 30.' });
+      return;
+    }
+    const limit = requestedLimit;
 
     // Optional API key authorization check for developer quotas
     const authHeader = req.headers.authorization;
@@ -593,6 +650,7 @@ async function startServer() {
       // Atomic usage increment
       apiKeyRecord.usedMonthly++;
       apiKeyRecord.lastUsedAt = new Date().toISOString();
+      persistApiKeys();
     }
 
     try {
@@ -636,12 +694,19 @@ async function startServer() {
       res.status(400).json({ error: 'Missing question in request body' });
       return;
     }
-    const digest = generateSourceDigest(question, items || []);
+    if (typeof question !== 'string' || question.length > 1000 || !Array.isArray(items) || items.length > 100) {
+      res.status(400).json({ error: 'Invalid request', message: 'question must be a string up to 1000 characters and items must be an array of at most 100 results.' });
+      return;
+    }
+    const safeItems = items.filter((item: any) => item && typeof item.title === 'string' && typeof item.snippet === 'string' && typeof item.source === 'string').slice(0, 100);
+    const digest = generateSourceDigest(question, safeItems);
     res.json({
       question,
       answer: digest,
-      model: 'Orbit Grounded Synthesis Engine v4',
-      sourcesUsed: (items || []).slice(0, 4).length,
+      model: 'source-digest-template',
+      isAiGenerated: false,
+      sourcesUsed: safeItems.slice(0, 4).length,
+      note: 'This is an extractive source digest, not an AI-generated answer. Verify claims against the linked sources.',
     });
   });
 
@@ -690,6 +755,7 @@ async function startServer() {
     };
 
     apiKeysStore.set(h, record);
+    persistApiKeys();
 
     // Show plain key ONLY once upon creation!
     res.status(201).json({
@@ -713,6 +779,7 @@ async function startServer() {
     for (const [hash, record] of apiKeysStore.entries()) {
       if (record.id === id) {
         record.status = 'revoked';
+        persistApiKeys();
         found = true;
         break;
       }
@@ -724,58 +791,25 @@ async function startServer() {
     }
   });
 
-  // Simulated Razorpay/UPI Payment Checkout & Webhook
-  app.post('/api/v1/billing/checkout', (req: Request, res: Response) => {
-    const { plan, billingCycle = 'monthly' } = req.body;
-    const pricing: Record<string, number> = {
-      starter: 199,
-      pro: 599,
-      business: 1499,
-    };
-
-    const amountInr = pricing[plan];
-    if (!amountInr) {
-      res.status(400).json({ error: 'Invalid plan selected' });
-      return;
-    }
-
-    const orderId = `order_${crypto.randomBytes(8).toString('hex')}`;
-    res.json({
-      orderId,
-      currency: 'INR',
-      amount: amountInr * 100, // paise
-      plan,
-      billingCycle,
-      status: 'created',
-      mockVerificationToken: crypto.randomBytes(24).toString('hex'),
-      paymentMethodsSupported: ['UPI (Google Pay, PhonePe, Paytm)', 'Cards (RuPay, Visa, MC)', 'NetBanking'],
-    });
+  // Billing is intentionally unavailable until a real provider, signature verification,
+  // persistent order state, and idempotency handling have been configured.
+  app.post('/api/v1/billing/checkout', (_req: Request, res: Response) => {
+    res.status(503).json({ error: 'Billing unavailable', message: 'Real payment processing is not configured. No payment has been taken.' });
   });
 
-  app.post('/api/v1/billing/webhook', (req: Request, res: Response) => {
-    const { orderId, paymentId, signature } = req.body;
-    if (!orderId || !paymentId) {
-      res.status(400).json({ error: 'Invalid webhook payload' });
-      return;
-    }
-    // Idempotent webhook receipt
-    res.json({
-      received: true,
-      event: 'payment.captured',
-      orderId,
-      paymentId,
-      status: 'active',
-      verifiedAt: new Date().toISOString(),
-    });
+  app.post('/api/v1/billing/webhook', (_req: Request, res: Response) => {
+    res.status(503).json({ error: 'Billing webhook unavailable', message: 'Webhook verification is not configured; events are not accepted.' });
   });
 
-  // Backward compatibility alias for /api/stats
+  // This build federates live provider queries; it does not maintain a local web index.
+  // Return null rather than fabricated crawl/index statistics.
   app.get('/api/stats', (_req: Request, res: Response) => {
     res.json({
-      indexed_pages: 142080,
-      indexed_domains: 4210,
-      seed_urls: 6000,
-      last_indexed_at: new Date().toISOString(),
+      indexed_pages: null,
+      indexed_domains: null,
+      seed_urls: null,
+      last_indexed_at: null,
+      stats_available: false,
       active_providers: Object.keys(providers).length,
     });
   });
