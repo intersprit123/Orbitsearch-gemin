@@ -75,11 +75,8 @@ export default function App() {
       setSourcesSucceeded(data.sourcesSucceeded || []);
       setResults(data.results || []);
 
-      // Increment user quota count locally
-      setUser(prev => ({
-        ...prev,
-        monthlyUsed: Math.min(prev.monthlyQuota, prev.monthlyUsed + 1),
-      }));
+      // Guest-mode searches are not account-billed. Quota usage is only authoritative
+      // for a validated API key and is not represented by this local UI state.
 
       // If results returned, request grounded AI source synthesis
       if (data.results && data.results.length > 0) {
