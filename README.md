@@ -51,3 +51,15 @@ npm start
 ## Verification
 
 Run `npm install`, `npm run lint`, `npm run build`, and `npm test`. CI runs these checks on `dev`, `main`, and pull requests. Provider integration checks require network access and may vary with upstream availability.
+
+## Configuration and production limitations
+
+- Set `ORBIT_ADMIN_TOKEN` to a cryptographically random secret of at least 32 characters before using API-key administration. Requests to `/api/v1/keys` must send it as `Authorization: Bearer <token>`. If it is absent or too short, those routes remain disabled.
+- Set `ORBIT_ALLOWED_ORIGINS` to a comma-separated list of exact browser origins only if cross-origin access is needed. Same-origin requests work without it.
+- Set `ORBIT_DATA_DIR` to a persistent, private writable directory in deployments. API-key metadata is persisted there; ephemeral container filesystems will lose it on redeploy. Do not commit `data/api-keys.json`.
+- Public browser search remains rate-limited but does not require a key. This is not yet a production multi-tenant paid API: user accounts, tenant ownership, billing, monthly quota rollover, distributed rate limits, and payment-provider integration are not implemented.
+- The original Python crawler/index engine is not present in this repository's current tree. This build performs federated live searches and does not claim to have integrated the original Python engine.
+
+## Verification
+
+Run `npm install`, `npm run lint`, `npm run build`, and `npm test`. CI runs these checks on `dev`, `main`, and pull requests. The smoke tests do not require live upstream-provider access.
