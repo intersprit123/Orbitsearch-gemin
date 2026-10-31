@@ -446,8 +446,7 @@ async function queryLocalIndex(q: string, limit: number): Promise<SearchItem[]> 
   } catch {
     throw new Error('ORBIT_LOCAL_ENGINE_URL is not a valid URL');
   }
-  if (!['http:', 'https:'].includes(base.protocol) ||
-      base.hostname !== '127.0.0.1' ||
+  if (base.protocol !== 'http:' || base.hostname !== '127.0.0.1' || base.port !== '8080' ||
       base.username || base.password || base.search || base.hash) {
     throw new Error('ORBIT_LOCAL_ENGINE_URL must point to 127.0.0.1 only');
   }
