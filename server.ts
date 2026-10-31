@@ -52,11 +52,11 @@ async function safeFetchJson(url: string, timeoutMs: number = 4500, headers: Rec
         ...headers,
       },
     });
-    clearTimeout(timer);
     if (!res.ok) {
       throw new Error(`Upstream returned HTTP ${res.status}`);
     }
     const body = await res.text();
+    clearTimeout(timer);
     if (body.length > 2_000_000) throw new Error('Upstream response exceeded the 2 MB limit');
     return JSON.parse(body);
   } catch (err: any) {
@@ -81,9 +81,9 @@ async function safeFetchText(url: string, timeoutMs: number = 4500, headers: Rec
         ...headers,
       },
     });
-    clearTimeout(timer);
     if (!res.ok) throw new Error(`Upstream returned HTTP ${res.status}`);
     const body = await res.text();
+    clearTimeout(timer);
     if (body.length > 2_000_000) throw new Error('Upstream response exceeded the 2 MB limit');
     return body;
   } catch (err: any) {
@@ -523,7 +523,7 @@ function generateSourceDigest(q: string, items: SearchItem[]): string {
     .map((s, idx) => `[${idx + 1}] "${s.title}" (${s.source}): ${s.snippet.replace(/\n+/g, ' ')}`)
     .join('\n\n');
 
-  return `### Grounded Synthesis for "${q}"\n\nBased on cross-provider indexing across ${topSources.map(s => s.source).join(', ')}:\n\n${sourceBullets}\n\n*Key takeaway:* Orbit Search verified ${items.length} relevant citations without ad tracking or commercial ranking bias.`;
+  return `### Grounded Synthesis for "${q}"\n\nBased on cross-provider indexing across ${topSources.map(s => s.source).join(', ')}:\n\n${sourceBullets}\n\n*Note:* This is a formatting aid, not an AI-generated answer or independent verification. Open the original sources to check the claims.`;
 }
 
 // --- Main Server Function ---
