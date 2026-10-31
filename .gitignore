@@ -3,3 +3,10 @@ __pycache__/
 .venv/
 venv/
 .env
+
+# Runtime credentials and persistent API-key records
+/data/api-keys.json
+/data/api-keys.json.tmp
+node_modules/
+dist/
+*.log
