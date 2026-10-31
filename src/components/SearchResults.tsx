@@ -128,7 +128,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
           </div>
           <div className="flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
-            <span className="text-slate-400">Federation Active</span>
+            <span className="text-slate-400">Federated search</span>
           </div>
         </div>
       </div>
@@ -136,13 +136,13 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
       <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-12">
         {/* Main Result Stream */}
         <div className="lg:col-span-8 space-y-6">
-          {/* AI Grounded Synthesis Digest */}
+          {/* Source digest (not AI-generated) */}
           {aiDigest && (
             <div className="rounded-xl border border-sky-500/30 bg-sky-950/20 p-5 shadow-lg shadow-sky-950/40">
               <div className="flex items-center justify-between border-b border-sky-500/20 pb-3 mb-3">
                 <div className="flex items-center gap-2 text-sky-400 text-sm font-semibold">
                   <Sparkles className="h-4 w-4" />
-                  <span>Orbit Grounded Synthesis</span>
+                  <span>Orbit Source Digest</span>
                 </div>
                 <button
                   onClick={() => setShowAiAnswer(!showAiAnswer)}
@@ -178,7 +178,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
               <Search className="mx-auto h-10 w-10 text-slate-600 mb-3" />
               <h3 className="text-lg font-semibold text-white">No results found for “{query}”</h3>
               <p className="mt-1 text-sm text-slate-400 max-w-md mx-auto">
-                No matching verified sources were returned. Try checking for spelling errors, using more general search terms, or querying another domain category.
+                No results were returned by the selected providers. Try checking for spelling errors, using more general search terms, or querying another domain category.
               </p>
             </div>
           )}
@@ -311,7 +311,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
               </div>
               <div className="flex justify-between py-1">
                 <span className="text-slate-400">Tracking Profile</span>
-                <span className="font-mono text-emerald-400">None (Isolated)</span>
+                <span className="font-mono text-emerald-400">External providers may log queries</span>
               </div>
             </div>
           </div>
