@@ -66,9 +66,9 @@ export const AdminConsole: React.FC = () => {
         <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
           <span className="text-xs text-slate-400">Active Upstream Gateways</span>
           <div className="mt-2 text-2xl font-bold font-mono text-emerald-400">
-            {providerList.length} / {providerList.length}
+            {providerList.filter((provider) => provider.state !== 'open').length} / {providerList.length}
           </div>
-          <span className="text-[11px] text-slate-500">All circuits closed (healthy)</span>
+          <span className="text-[11px] text-slate-500">Circuit state is not an uptime guarantee</span>
         </div>
 
         <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
@@ -90,9 +90,9 @@ export const AdminConsole: React.FC = () => {
         <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
           <span className="text-xs text-slate-400">Security Firewall</span>
           <div className="mt-2 text-2xl font-bold font-mono text-emerald-400">
-            SSRF Guard
+            Outbound allowlist
           </div>
-          <span className="text-[11px] text-slate-500">Private IP blocklist active</span>
+          <span className="text-[11px] text-slate-500">HTTPS provider allowlist active</span>
         </div>
       </div>
 
@@ -152,8 +152,8 @@ export const AdminConsole: React.FC = () => {
                     <span className="font-mono text-slate-200 font-semibold">{p.failureCount}</span>
                   </div>
                   <div>
-                    <span className="text-slate-500 block">Health Rating</span>
-                    <span className="font-mono text-emerald-400 font-semibold">99.9%</span>
+                    <span className="text-slate-500 block">Success Rate</span>
+                    <span className="font-mono text-emerald-400 font-semibold">{p.totalCalls > 0 ? Math.round((p.successCalls / p.totalCalls) * 100) + '%' : 'No calls yet'}</span>
                   </div>
                 </div>
               </div>
