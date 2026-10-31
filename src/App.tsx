@@ -11,13 +11,13 @@ import { InfoModals } from './components/InfoModals';
 import { SearchResultItem, SearchCategory, UserAccount } from './types';
 
 const INITIAL_USER: UserAccount = {
-  id: 'usr_default_01',
-  name: 'Dev Engineer',
-  email: 'developer@orbitsearch.io',
-  plan: 'pro',
-  monthlyQuota: 50000,
-  monthlyUsed: 1248,
-  billingCycleEnd: 'Nov 30, 2026',
+  id: 'guest',
+  name: 'Guest developer',
+  email: 'Not signed in',
+  plan: 'free',
+  monthlyQuota: 1000,
+  monthlyUsed: 0,
+  billingCycleEnd: 'Not available',
 };
 
 export default function App() {
@@ -166,7 +166,7 @@ export default function App() {
 
         {activeTab === 'developer' && (
           <DeveloperPortal
-            apiKey="orb_live_demo_enterprise_99x"
+            apiKey=""
             onNavigateToDashboard={() => setActiveTab('dashboard')}
           />
         )}
