@@ -48,6 +48,17 @@ npm start
 - Public browser search remains rate-limited but does not require a key. This is not yet a production multi-tenant paid API: user accounts, tenant ownership, billing, monthly quota rollover, distributed rate limits, and payment-provider integration are not implemented.
 - The existing Python crawler/index engine is not present in this repository's current tree. This build performs federated live searches and does not claim to have integrated the original Python engine.
 
+
+### Optional original local index integration
+
+The React/Express search gateway can include results from the original Python crawler/index without modifying the original `Orbit-Search` repository. In a separate terminal, clone/open that repository and run:
+
+```bash
+python3 search_engine.py serve --host 127.0.0.1 --port 8080
+```
+
+Then set `ORBIT_LOCAL_ENGINE_URL=http://127.0.0.1:8080` in the Node app environment and restart it. The bridge only accepts loopback `127.0.0.1`, has a short timeout and response-size limit, and only queries the existing `/api/search` endpoint; it does not trigger crawling. If the local index is not configured, the federated external providers continue to work independently.
+
 ## Verification
 
 Run `npm install`, `npm run lint`, `npm run build`, and `npm test`. CI runs these checks on `dev`, `main`, and pull requests. Provider integration checks require network access and may vary with upstream availability.
