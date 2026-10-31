@@ -187,6 +187,13 @@ function checkRateLimit(id: string, map: Map<string, RateBucket>, maxTokens: num
   const now = Date.now();
   let bucket = map.get(id);
   if (!bucket) {
+    // Bound memory use if an attacker creates many distinct client identities.
+    if (map.size >= 10000) {
+      for (const [key, entry] of map.entries()) {
+        if (now - entry.lastRefill > 10 * 60 * 1000) map.delete(key);
+      }
+      if (map.size >= 10000) return false;
+    }
     bucket = { tokens: maxTokens, lastRefill: now };
     map.set(id, bucket);
   } else {
@@ -548,7 +555,7 @@ async function federatedSearch(q: string, category: string = 'all', limit: numbe
   const seenUrls = new Set<string>();
   const uniqueItems: SearchItem[] = [];
   for (const item of allItems) {
-    if (!item.url || seenUrls.has(item.url)) continue;
+    if (!item.url || !/^https?:\/\//i.test(item.url) || seenUrls.has(item.url)) continue;
     seenUrls.add(item.url);
     uniqueItems.push(item);
   }
@@ -584,6 +591,7 @@ function generateSourceDigest(q: string, items: SearchItem[]): string {
 // --- Main Server Function ---
 async function startServer() {
   const app = express();
+  app.disable('x-powered-by');
   const PORT = Number(process.env.PORT) || 3000;
 
   const allowedOrigins = (process.env.ORBIT_ALLOWED_ORIGINS || '').split(',').map(value => value.trim()).filter(Boolean);
@@ -720,7 +728,8 @@ async function startServer() {
         results: data.results,
       });
     } catch (err: any) {
-      res.status(500).json({ error: 'Search failed', message: err?.message || 'Internal federated search error' });
+      console.error('[Orbit Search] Federated search failed:', err);
+      res.status(500).json({ error: 'Search failed', message: 'Unable to complete this search request.' });
     }
   });
 
