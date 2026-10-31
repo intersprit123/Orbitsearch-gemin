@@ -131,7 +131,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* Monthly Quota Card */}
         <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 backdrop-blur-sm sm:col-span-2">
           <div className="flex items-center justify-between text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-            <span>Monthly Request Quota</span>
+            <span>Guest Preview Quota (not account-backed)</span>
             <button
               onClick={onNavigateToPricing}
               className="text-sky-400 hover:text-sky-300 normal-case font-medium text-xs"
@@ -163,8 +163,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
 
           <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500">
-            <span>Quota resets on {user.billingCycleEnd}</span>
-            <span>Atomic rate-limiting enforced on server</span>
+            <span>Preview only · no signed-in account</span>
+            <span>API key usage is enforced per process; no user billing is configured</span>
           </div>
         </div>
       </div>
