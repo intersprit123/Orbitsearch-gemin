@@ -105,12 +105,12 @@ interface ProviderHealth {
 }
 
 const providers: Record<string, ProviderHealth> = {
-  wikipedia: { name: 'Wikipedia Open Knowledge', category: 'knowledge', state: 'closed', failureCount: 0, lastFailureTime: 0, totalCalls: 0, successCalls: 0, averageLatencyMs: 140 },
-  arxiv: { name: 'arXiv Research Archive', category: 'research', state: 'closed', failureCount: 0, lastFailureTime: 0, totalCalls: 0, successCalls: 0, averageLatencyMs: 320 },
-  github: { name: 'GitHub Code Repositories', category: 'code', state: 'closed', failureCount: 0, lastFailureTime: 0, totalCalls: 0, successCalls: 0, averageLatencyMs: 250 },
-  openlibrary: { name: 'Open Library Catalog', category: 'books', state: 'closed', failureCount: 0, lastFailureTime: 0, totalCalls: 0, successCalls: 0, averageLatencyMs: 280 },
-  gdelt: { name: 'GDELT Global News Wire', category: 'news', state: 'closed', failureCount: 0, lastFailureTime: 0, totalCalls: 0, successCalls: 0, averageLatencyMs: 390 },
-  commons: { name: 'Wikimedia Commons Media', category: 'images', state: 'closed', failureCount: 0, lastFailureTime: 0, totalCalls: 0, successCalls: 0, averageLatencyMs: 210 },
+  wikipedia: { name: 'Wikipedia Open Knowledge', category: 'knowledge', state: 'closed', failureCount: 0, lastFailureTime: 0, totalCalls: 0, successCalls: 0, averageLatencyMs: 0 },
+  arxiv: { name: 'arXiv Research Archive', category: 'research', state: 'closed', failureCount: 0, lastFailureTime: 0, totalCalls: 0, successCalls: 0, averageLatencyMs: 0 },
+  github: { name: 'GitHub Code Repositories', category: 'code', state: 'closed', failureCount: 0, lastFailureTime: 0, totalCalls: 0, successCalls: 0, averageLatencyMs: 0 },
+  openlibrary: { name: 'Open Library Catalog', category: 'books', state: 'closed', failureCount: 0, lastFailureTime: 0, totalCalls: 0, successCalls: 0, averageLatencyMs: 0 },
+  gdelt: { name: 'GDELT Global News Wire', category: 'news', state: 'closed', failureCount: 0, lastFailureTime: 0, totalCalls: 0, successCalls: 0, averageLatencyMs: 0 },
+  commons: { name: 'Wikimedia Commons Media', category: 'images', state: 'closed', failureCount: 0, lastFailureTime: 0, totalCalls: 0, successCalls: 0, averageLatencyMs: 0 },
 };
 
 function recordProviderSuccess(id: string, latencyMs: number) {
