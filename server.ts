@@ -434,6 +434,58 @@ async function queryCommonsImages(q: string, limit: number): Promise<SearchItem[
   }
 }
 
+// Optional loopback bridge to the original Python SQLite/FTS5 engine.
+// Set ORBIT_LOCAL_ENGINE_URL=http://127.0.0.1:8080 after starting search_engine.py.
+// The bridge deliberately refuses non-loopback hosts to avoid turning this into an SSRF proxy.
+async function queryLocalIndex(q: string, limit: number): Promise<SearchItem[]> {
+  const configured = process.env.ORBIT_LOCAL_ENGINE_URL;
+  if (!configured) return [];
+  let base: URL;
+  try {
+    base = new URL(configured);
+  } catch {
+    throw new Error('ORBIT_LOCAL_ENGINE_URL is not a valid URL');
+  }
+  if (!['http:', 'https:'].includes(base.protocol) ||
+      base.hostname !== '127.0.0.1' ||
+      base.username || base.password || base.search || base.hash) {
+    throw new Error('ORBIT_LOCAL_ENGINE_URL must point to 127.0.0.1 only');
+  }
+  const target = new URL('/api/search', base);
+  target.searchParams.set('q', q);
+  target.searchParams.set('limit', String(Math.min(limit, 30)));
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3500);
+  try {
+    const response = await fetch(target, {
+      signal: controller.signal,
+      redirect: 'error',
+      headers: { Accept: 'application/json', 'User-Agent': 'OrbitSearch/4.0 local-index-bridge' },
+    });
+    if (!response.ok) throw new Error('Local index returned HTTP ' + response.status);
+    const body = await response.text();
+    if (body.length > 2_000_000) throw new Error('Local index response exceeded the 2 MB limit');
+    clearTimeout(timer);
+    const data = JSON.parse(body);
+    const rows = Array.isArray(data.results) ? data.results : [];
+    return rows.slice(0, limit).flatMap((row: any, index: number) => {
+      if (!row || typeof row.url !== 'string' || !/^https?:\/\//i.test(row.url)) return [];
+      return [{
+        id: 'local_' + String(row.id ?? index),
+        title: String(row.title || row.url).slice(0, 500),
+        url: row.url,
+        snippet: String(row.snippet || row.description || '').slice(0, 1200),
+        source: 'Orbit local SQLite index',
+        category: 'web' as const,
+        published: row.indexed_at,
+        relevanceScore: 100 - index,
+      }];
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Master federated search orchestrator
 async function federatedSearch(q: string, category: string = 'all', limit: number = 10): Promise<{
   results: SearchItem[];
@@ -455,6 +507,10 @@ async function federatedSearch(q: string, category: string = 'all', limit: numbe
   }
 
   const tasks: { id: string; run: () => Promise<SearchItem[]> }[] = [];
+
+  if (category === 'all' && process.env.ORBIT_LOCAL_ENGINE_URL) {
+    tasks.push({ id: 'local_index', run: () => queryLocalIndex(normalizedQuery, limit) });
+  }
 
   if (category === 'all' || category === 'knowledge') {
     if (isProviderAvailable('wikipedia')) tasks.push({ id: 'wikipedia', run: () => queryWikipedia(normalizedQuery, limit) });
