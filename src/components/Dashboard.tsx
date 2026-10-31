@@ -19,15 +19,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [newKeyName, setNewKeyName] = useState('Production Microservice Key');
   const [generatedPlainKey, setGeneratedPlainKey] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState(false);
+  const [adminToken, setAdminToken] = useState(() => sessionStorage.getItem('orbit_admin_token') || '');
+  const [apiError, setApiError] = useState<string | null>(null);
+  const adminHeaders = () => ({ Authorization: `Bearer ${adminToken}` });
 
   // Load API keys from backend
   const loadKeys = async () => {
     try {
-      const res = await fetch('/api/v1/keys');
+      const res = await fetch('/api/v1/keys', { headers: adminHeaders() });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.message || data.error || 'Could not load API keys');
+      setApiError(null);
       setKeys(data.keys || []);
-    } catch {
-      // fallback
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : 'Could not load API keys');
     } finally {
       setLoadingKeys(false);
     }
@@ -42,14 +47,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
     try {
       const res = await fetch('/api/v1/keys', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
         body: JSON.stringify({ name: newKeyName, plan: user.plan }),
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.message || data.error || 'Failed to generate key');
       setGeneratedPlainKey(data.secretPlainKey);
+      setApiError(null);
       loadKeys();
-    } catch {
-      alert('Failed to generate key');
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : 'Failed to generate key');
     }
   };
 
@@ -58,10 +65,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
       return;
     }
     try {
-      await fetch(`/api/v1/keys/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/v1/keys/${id}`, { method: 'DELETE', headers: adminHeaders() });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || data.error || 'Revocation failed');
+      setApiError(null);
       loadKeys();
-    } catch {
-      alert('Revocation failed');
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : 'Revocation failed');
     }
   };
 
@@ -90,6 +100,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <Plus className="h-4 w-4" />
           <span>Generate API Key</span>
         </button>
+      </div>
+
+      <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
+        <div className="text-sm font-semibold text-amber-200">API key administration is locked by default</div>
+        <p className="text-xs text-slate-300">Set the server's ORBIT_ADMIN_TOKEN and enter that same secret here to manage keys. This is an operator token, not a user login. Keep it private and use only over HTTPS.</p>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input type="password" autoComplete="off" value={adminToken} onChange={(event) => { setAdminToken(event.target.value); sessionStorage.setItem('orbit_admin_token', event.target.value); }} placeholder="ORBIT_ADMIN_TOKEN" className="h-10 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 text-xs text-white" />
+          <button onClick={loadKeys} className="rounded-lg bg-slate-700 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-600">Authenticate / Refresh</button>
+        </div>
+        {apiError && <p role="alert" className="text-xs text-rose-300">{apiError}</p>}
       </div>
 
       {/* Account & Quota Cards Grid */}
