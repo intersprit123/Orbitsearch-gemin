@@ -7,7 +7,7 @@ interface DeveloperPortalProps {
 }
 
 export const DeveloperPortal: React.FC<DeveloperPortalProps> = ({
-  apiKey = 'orb_live_demo_enterprise_99x',
+  apiKey = '',
   onNavigateToDashboard,
 }) => {
   const [selectedLanguage, setSelectedLanguage] = useState<'curl' | 'javascript' | 'python'>('curl');
@@ -131,7 +131,7 @@ print(f"Results: {data['count']} items in {data['tookMs']}ms")`;
                 placeholder="orb_live_..."
                 className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 font-mono text-xs text-sky-300 focus:border-indigo-500 focus:outline-none"
               />
-              <p className="text-[11px] text-slate-500 mt-1">Pre-loaded with active test key.</p>
+              <p className="text-[11px] text-slate-500 mt-1">No demo key is active. Enter a valid API key, or leave blank to use public browser search.</p>
             </div>
 
             <div>
