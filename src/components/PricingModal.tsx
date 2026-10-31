@@ -114,22 +114,11 @@ export const PricingModal: React.FC<PricingModalProps> = ({
         body: JSON.stringify({ plan: selectedPlan.id }),
       });
       const data = await res.json();
-      
-      // Simulate webhook receipt and confirmation
-      await fetch('/api/v1/billing/webhook', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orderId: data.orderId,
-          paymentId: `pay_${Date.now()}`,
-          signature: data.mockVerificationToken,
-        }),
-      });
-
-      onUpgradePlan(selectedPlan.id);
-      setCheckoutStep('success');
-    } catch {
-      alert('Checkout error');
+      if (!res.ok) throw new Error(data.message || data.error || 'Billing is not configured');
+      alert('Billing is not configured yet. No payment was taken and your plan was not changed.');
+      setCheckoutStep('plan');
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Billing is not configured. No payment was taken.');
     } finally {
       setIsProcessing(false);
     }
@@ -146,7 +135,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
           Predictable plans for curious minds & developers.
         </h1>
         <p className="mt-3 text-sm text-slate-400 sm:text-base">
-          All plans include full access to the federated search engine. Upgrade as your API volume grows with India-compatible payment rails.
+          Choose a plan to review proposed limits. Paid billing is not configured, so paid plans cannot be purchased or activated.
         </p>
       </div>
 
@@ -206,7 +195,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
               <div className="mt-8">
                 <button
                   onClick={() => handleStartCheckout(plan)}
-                  disabled={isCurrent}
+                  disabled={isCurrent || plan.id !== 'free'}
                   className={`w-full rounded-xl py-2.5 text-xs font-semibold transition-all ${
                     isCurrent
                       ? 'bg-slate-800 text-slate-400 cursor-default'
@@ -215,7 +204,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                       : 'bg-slate-800 text-white hover:bg-slate-700'
                   }`}
                 >
-                  {isCurrent ? 'Current Plan' : plan.priceInr === 0 ? 'Downgrade to Free' : `Upgrade to ${plan.name.split(' ')[0]}`}
+                  {isCurrent ? 'Current Plan' : plan.priceInr === 0 ? 'Select Free Plan' : 'Paid billing unavailable'}
                 </button>
               </div>
             </div>
@@ -310,7 +299,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
             <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 p-3 border border-amber-500/20 text-xs text-amber-300">
               <AlertCircle className="h-4 w-4 shrink-0 text-amber-400" />
               <span>
-                Sandbox Mode Active: Live billing credentials remain disabled until merchant verification. Test payments update tier instantly.
+                Billing is disabled. No payment will be collected and no paid plan can be activated until a real payment provider is integrated.
               </span>
             </div>
 
